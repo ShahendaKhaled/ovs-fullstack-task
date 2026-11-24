@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
-require_once __DIR__ . '/marks.php';
+require_once __DIR__ . '/serializers.php';
 
 const ENROLLMENT_STATUSES = ['in_progress', 'completed', 'withdrawn'];
 
@@ -36,9 +36,9 @@ function student_courses(int $studentId, ?string $status = null, ?int $courseId 
     }
     $sql .= " ORDER BY FIELD(e.status, 'in_progress', 'completed', 'withdrawn'), c.code";
 
-    $stmt = db()->prepare($sql);
-    $stmt->execute($params);
-    $enrollments = $stmt->fetchAll();
+    $orderedStudentCoursesStatement = db()->prepare($sql);
+    $orderedStudentCoursesStatement->execute($params);
+    $enrollments = $orderedStudentCoursesStatement->fetchAll();
 
     // --- Query 2: evaluations for all of those courses, with this student's result
     // One query for every course (not one per course). LEFT JOIN keeps
@@ -47,7 +47,7 @@ function student_courses(int $studentId, ?string $status = null, ?int $courseId 
     if ($enrollments) {
         $courseIds = array_column($enrollments, 'course_id');
         $placeholders = implode(',', array_fill(0, count($courseIds), '?'));
-        $stmt = db()->prepare("
+        $studentCourseEvaluationsStatement = db()->prepare("
             SELECT ce.id, ce.course_id, ce.name, ce.category, ce.weight_percent, ce.out_of, ce.position,
                    se.id AS result_id, se.score, se.graded_at
             FROM course_evaluations ce
@@ -55,43 +55,16 @@ function student_courses(int $studentId, ?string $status = null, ?int $courseId 
                    ON se.course_evaluation_id = ce.id AND se.student_id = ?
             WHERE ce.course_id IN ($placeholders)
             ORDER BY ce.course_id, ce.position");
-        $stmt->execute([$studentId, ...$courseIds]);
+        $studentCourseEvaluationsStatement->execute([$studentId, ...$courseIds]);
 
-        foreach ($stmt->fetchAll() as $row) {
-            $evalStatus = evaluation_status($row['result_id'] !== null, $row['score']);
-            $outOf = (float) $row['out_of'];
-            $score = $evalStatus === 'graded' ? (float) $row['score'] : null;
-
-            $evaluationsByCourse[$row['course_id']][] = [
-                'id'             => (int) $row['id'],
-                'name'           => $row['name'],
-                'category'       => $row['category'],
-                'weight_percent' => (float) $row['weight_percent'],
-                'out_of'         => $outOf,
-                'status'         => $evalStatus,
-                'score'          => $score,
-                'percent'        => $score !== null && $outOf > 0 ? round($score / $outOf * 100, 1) : null,
-                'graded_at'      => $row['graded_at'],
-            ];
+        foreach ($studentCourseEvaluationsStatement->fetchAll() as $row) {
+            $evaluationsByCourse[$row['course_id']][] = serialize_evaluation($row);
         }
     }
 
     // --- Shape each course -----------------------------------------------------
-    return array_map(function (array $e) use ($evaluationsByCourse): array {
-        $evaluations = $evaluationsByCourse[$e['course_id']] ?? [];
-        return [
-            'enrollment_id'    => (int) $e['enrollment_id'],
-            'course_id'        => (int) $e['course_id'],
-            'code'             => $e['code'],
-            'title'            => $e['title'],
-            'grade'            => (int) $e['grade'],
-            'credit_value'     => (float) $e['credit_value'],
-            'status'           => $e['status'],
-            'progress_percent' => (int) $e['progress_percent'],
-            'enrolled_at'      => $e['enrolled_at'],
-            'completed_at'     => $e['completed_at'],
-            'mark'             => course_mark($evaluations),
-            'evaluations'      => $evaluations,
-        ];
-    }, $enrollments);
+    return array_map(
+        fn (array $e): array => serialize_enrolled_course($e, $evaluationsByCourse[$e['course_id']] ?? []),
+        $enrollments
+    );
 }

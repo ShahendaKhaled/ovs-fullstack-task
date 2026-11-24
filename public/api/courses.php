@@ -26,10 +26,6 @@ if ($status !== '' && !in_array($status, ENROLLMENT_STATUSES, true)) {
 }
 
 send_data([
-    'student' => [
-        'id'         => (int) $student['id'],
-        'first_name' => $student['first_name'],
-        'last_name'  => $student['last_name'],
-    ],
+    'student' => serialize_student($student),
     'courses' => student_courses((int) $student['id'], $status ?: null),
 ]);

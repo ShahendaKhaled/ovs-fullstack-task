@@ -17,6 +17,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../src/http.php'; // first: installs the error handlers
 require_once __DIR__ . '/../../src/db.php';
 require_once __DIR__ . '/../../src/auth.php';
+require_once __DIR__ . '/../../src/serializers.php';
 
 require_method('GET');
 $student = current_student();
@@ -32,13 +33,6 @@ $stmt = db()->prepare('
     ORDER BY c.grade, c.code');
 $stmt->execute([$student['id']]);
 
-$courses = array_map(fn (array $c): array => [
-    'id'                => (int) $c['id'],
-    'code'              => $c['code'],
-    'title'             => $c['title'],
-    'grade'             => (int) $c['grade'],
-    'credit_value'      => (float) $c['credit_value'],
-    'enrollment_status' => $c['enrollment_status'],
-], $stmt->fetchAll());
+$courses = array_map('serialize_catalogue_course', $stmt->fetchAll());
 
 send_data(['courses' => $courses]);

@@ -51,6 +51,7 @@ Reset the database before every test run. Some tests enroll students and the app
 - Plain PHP to match the LMS.
 - The `X-Student-Id` header stands in for login.
 - Added `GET /api/catalogue.php` for the enrol list.
+- Response shapes are plain serializer functions in `src/serializers.php`. In a bigger project, readonly classes implementing `JsonSerializable` would be more organized: typed fields, one class per resource, and IDE support for the API contract.
 - The dev DB password is in code; next step is a gitignored `.env`.
 
 ## AI tools

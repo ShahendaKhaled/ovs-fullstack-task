@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Courses</title>
+  <link rel="stylesheet" href="styles.css">
+  <!-- External module script only: the CSP allows no inline JS. Modules are deferred. -->
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <header class="site-header">
+    <div class="wrap site-header__inner">
+      <p class="site-header__name">My Courses</p>
+      <!-- Demo only: stands in for login. Sets the X-Student-Id header the API reads. -->
+      <div class="student-picker">
+        <label for="student-select">Viewing as (demo)</label>
+        <select id="student-select">
+          <option value="1">Student 1</option>
+          <option value="2">Student 2</option>
+          <option value="3">Student 3</option>
+        </select>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="wrap">
+    <h1 id="page-title">My Courses</h1>
+    <p id="greeting" class="greeting"></p>
+
+    <!-- Screen-reader announcements: polite for results, assertive for errors. -->
+    <p id="announcer" class="visually-hidden" role="status" aria-live="polite"></p>
+    <p id="error-banner" class="banner banner--error" role="alert" hidden></p>
+
+    <section class="section" aria-labelledby="enrolled-heading">
+      <div class="section__head">
+        <h2 id="enrolled-heading">Enrolled courses</h2>
+        <fieldset class="filter">
+          <legend class="filter__legend">Show</legend>
+          <input class="visually-hidden" type="radio" name="status" id="filter-all" value="" checked>
+          <label for="filter-all">All</label>
+          <input class="visually-hidden" type="radio" name="status" id="filter-in-progress" value="in_progress">
+          <label for="filter-in-progress">In progress</label>
+          <input class="visually-hidden" type="radio" name="status" id="filter-completed" value="completed">
+          <label for="filter-completed">Completed</label>
+          <input class="visually-hidden" type="radio" name="status" id="filter-withdrawn" value="withdrawn">
+          <label for="filter-withdrawn">Withdrawn</label>
+        </fieldset>
+      </div>
+
+      <p id="courses-loading" class="muted">Loading your courses…</p>
+      <p id="courses-empty" class="empty" hidden></p>
+      <ul id="course-list" class="course-list" aria-labelledby="enrolled-heading"></ul>
+    </section>
+
+    <section class="section" aria-labelledby="catalogue-heading">
+      <h2 id="catalogue-heading">Enroll in a course</h2>
+      <p class="muted">Courses currently open for enrollment.</p>
+      <p id="catalogue-loading" class="muted">Loading catalogue…</p>
+      <ul id="catalogue-list" class="catalogue" aria-labelledby="catalogue-heading"></ul>
+    </section>
+  </main>
+
+  <!-- One enrolled course. Filled in by app.js with textContent (never innerHTML). -->
+  <template id="course-template">
+    <li class="course">
+      <article class="course__card">
+        <header class="course__head">
+          <h3 class="course__title" tabindex="-1">
+            <span class="course__code"></span>
+            <span class="course__name"></span>
+          </h3>
+          <span class="badge course__status"></span>
+        </header>
+
+        <dl class="course__stats">
+          <div class="stat">
+            <dt>Progress</dt>
+            <dd>
+              <progress class="progress" max="100"></progress>
+              <span class="progress__text" aria-hidden="true"></span>
+            </dd>
+          </div>
+          <div class="stat">
+            <dt>Current mark</dt>
+            <dd>
+              <span class="mark__value"></span>
+              <span class="mark__basis"></span>
+            </dd>
+          </div>
+        </dl>
+
+        <details class="breakdown">
+          <summary>Evaluation breakdown</summary>
+          <table class="breakdown__table">
+            <caption class="visually-hidden"></caption>
+            <thead>
+              <tr>
+                <th scope="col">Evaluation</th>
+                <th scope="col" class="num">Weight</th>
+                <th scope="col">Result</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </details>
+      </article>
+    </li>
+  </template>
+
+  <!-- One catalogue course. -->
+  <template id="catalogue-template">
+    <li class="catalogue__item">
+      <div class="catalogue__info">
+        <span class="course__code"></span>
+        <span class="course__name"></span>
+        <span class="catalogue__meta"></span>
+      </div>
+      <div class="catalogue__action"></div>
+    </li>
+  </template>
+</body>
+</html>

@@ -3,7 +3,7 @@
   "private": true,
   "description": "End-to-end tests for the My Courses take-home (the app itself has no build step).",
   "scripts": {
-    "db:reset": "${MYSQL_ADMIN:-sudo mysql} < db/schema_and_seed.sql && ${MYSQL_ADMIN:-sudo mysql} < db/create_app_user.sql",
+    "db:reset": "${MYSQL_ADMIN:-sudo mysql} < db/schema_and_seed.sql && ${MYSQL_ADMIN:-sudo mysql} < db/create_app_user.sql && ${MYSQL_ADMIN:-sudo mysql} < tests/fixtures/test_data.sql",
     "test": "playwright test",
     "test:report": "playwright show-report"
   },

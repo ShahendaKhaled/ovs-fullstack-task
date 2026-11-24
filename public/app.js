@@ -27,9 +27,13 @@ const state = {
   filter: '',
   courses: [],
   catalogue: [],
-  // Bumped on every student/filter change, so a slow response for an old
-  // selection can't overwrite a newer one.
-  loadToken: 0,
+  // Each load takes a new token; only the newest load may write its result,
+  // so a slow response can never overwrite a newer one.
+  coursesToken: 0,
+  catalogueToken: 0,
+  // True while a load is in flight (its result may predate an enrollment).
+  coursesLoading: false,
+  catalogueLoading: false,
 };
 
 // --- API ---------------------------------------------------------------------
@@ -62,26 +66,32 @@ async function api(path, { method = 'GET', body } = {}) {
       json?.error?.message ?? `Something went wrong (HTTP ${response.status}).`,
     );
   }
+  // A 2xx that isn't our JSON (e.g. an HTML page from a proxy) is still a failure.
+  if (json === null || typeof json !== 'object' || !('data' in json)) {
+    throw new ApiError(response.status, 'bad_response', 'The server sent an unexpected response. Please try again.');
+  }
   return json.data;
 }
 
 // --- Loading -----------------------------------------------------------------
 
 async function loadCourses() {
-  const token = ++state.loadToken;
+  const token = ++state.coursesToken;
+  state.coursesLoading = true;
   els.courseList.setAttribute('aria-busy', 'true');
   els.coursesLoading.hidden = false;
   try {
     const query = state.filter ? `?status=${encodeURIComponent(state.filter)}` : '';
     const data = await api(`courses.php${query}`);
-    if (token !== state.loadToken) return; // a newer load has started
+    if (token !== state.coursesToken) return; // a newer load has started
     state.courses = data.courses;
     els.greeting.textContent = `Hi ${data.student.first_name}, here's where you stand.`;
     renderCourses();
   } catch (error) {
-    if (token === state.loadToken) showError(error.message);
+    if (token === state.coursesToken) showError(error.message);
   } finally {
-    if (token === state.loadToken) {
+    if (token === state.coursesToken) {
+      state.coursesLoading = false;
       els.courseList.removeAttribute('aria-busy');
       els.coursesLoading.hidden = true;
     }
@@ -89,17 +99,21 @@ async function loadCourses() {
 }
 
 async function loadCatalogue() {
-  const studentId = state.studentId;
+  const token = ++state.catalogueToken;
+  state.catalogueLoading = true;
   els.catalogueLoading.hidden = false;
   try {
     const data = await api('catalogue.php');
-    if (studentId !== state.studentId) return; // student switched meanwhile
+    if (token !== state.catalogueToken) return; // a newer load has started
     state.catalogue = data.courses;
     renderCatalogue();
   } catch (error) {
-    if (studentId === state.studentId) showError(error.message);
+    if (token === state.catalogueToken) showError(error.message);
   } finally {
-    if (studentId === state.studentId) els.catalogueLoading.hidden = true;
+    if (token === state.catalogueToken) {
+      state.catalogueLoading = false;
+      els.catalogueLoading.hidden = true;
+    }
   }
 }
 
@@ -214,33 +228,45 @@ function renderCatalogueItem(course) {
 
 async function enroll(button) {
   const courseId = Number(button.dataset.enroll);
+  const studentId = state.studentId;
   button.disabled = true;
   button.firstChild.textContent = 'Enrolling…';
   hideError();
 
   try {
     const { course } = await api('enrollments.php', { method: 'POST', body: { course_id: courseId } });
+    if (studentId !== state.studentId) return; // switched student meanwhile: not this page's course
 
     // Update both lists from the response: no full reload, no extra request.
-    setCatalogueStatus(courseId, course.status);
-    if (!state.filter || state.filter === course.status) {
+    // But a load still in flight may have been answered before this enrollment
+    // existed, so start a fresh load instead of letting that one win.
+    if (state.catalogueLoading) {
+      loadCatalogue();
+    } else {
+      setCatalogueStatus(courseId, course.status);
+    }
+    if (state.coursesLoading) {
+      await loadCourses();
+    } else if (!state.filter || state.filter === course.status) {
       state.courses = [...state.courses, course].sort(compareCourses);
       renderCourses();
     }
+    if (studentId !== state.studentId) return;
     announce(`Enrolled in ${course.code} ${course.title}.`);
 
     // The button is gone, so move focus somewhere meaningful: the new course.
     const heading = $(`.course[data-course-id="${course.course_id}"] .course__title`, els.courseList);
     heading?.focus();
   } catch (error) {
+    if (studentId !== state.studentId) return;
     showError(error.message);
+    // Re-enable first: if the refresh below fails, the button must not stay stuck.
+    button.disabled = false;
+    button.firstChild.textContent = 'Enroll';
     if (error.code === 'already_enrolled' || error.code === 'course_inactive') {
       // Our copy of the catalogue was out of date (another tab?); refresh both lists.
       loadCatalogue();
       loadCourses();
-    } else {
-      button.disabled = false;
-      button.firstChild.textContent = 'Enroll';
     }
   }
 }
@@ -273,10 +299,14 @@ function hideError() {
 
 // --- Student (demo stand-in for login) ------------------------------------------
 
-/** Reads ?student=N from the URL so a view can be linked and reloaded. Defaults to 1. */
+/**
+ * Reads ?student=N from the URL so a view can be linked and reloaded.
+ * Falls back to the first student in the picker for a missing or unknown id.
+ */
 function initialStudentId() {
-  const id = Number(new URLSearchParams(location.search).get('student'));
-  return Number.isInteger(id) && id > 0 ? id : 1;
+  const requested = new URLSearchParams(location.search).get('student');
+  const known = [...els.studentSelect.options].map((option) => option.value);
+  return Number(known.includes(requested) ? requested : known[0]);
 }
 
 function switchStudent(id) {

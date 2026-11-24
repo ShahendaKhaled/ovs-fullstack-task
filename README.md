@@ -1,6 +1,6 @@
 # OVS Take-Home — My Courses
 
-**Start:** 10:00 · **End:** _TODO_
+**Start:** 10:00 · **End:** 12:55
 
 ## How to run
 
@@ -23,12 +23,12 @@ php -S 127.0.0.1:8000 -t public
 
 Open http://127.0.0.1:8000/ and switch students with **Viewing as (demo)** (or link to `?student=2`).
 
-**3. Tests** (Playwright: 18 API tests covering every endpoint and error code, 9 browser tests of the page)
+**3. Tests** (Playwright: 21 API tests covering every endpoint and error code, 15 browser tests of the page, including slow and failed responses)
 
 ```bash
 npm ci                            # installs the pinned Playwright version from package-lock.json
 npx playwright install chromium   # first time only; on a fresh Linux box use --with-deps (needs sudo) for system libraries
-npm run db:reset   # fresh seed data; uses `sudo mysql`, or set MYSQL_ADMIN="mysql -u root -p"
+npm run db:reset   # seed data + tests/fixtures/test_data.sql; uses `sudo mysql`, or set MYSQL_ADMIN="mysql -u root -p"
 npm test           # starts `php -S` itself if it isn't already running
 npm run test:report   # HTML report, with a trace for any failure
 ```

@@ -1,15 +1,16 @@
 // @ts-check
 // The tests assert exact seed values (marks, enrollments) and some of them enroll
-// students, so they need a freshly seeded database. The app's MySQL user can't
+// students, so they need a freshly reset database (seed + test fixture). The app's MySQL user can't
 // delete rows (by design), so the suite can't reset the data itself. Instead it
 // checks the data through the API and stops early with a clear message.
 
 const { request } = require('@playwright/test');
 
-// Enrolled course codes per student in db/schema_and_seed.sql.
+// Enrolled course codes per student after `npm run db:reset`
+// (db/schema_and_seed.sql plus tests/fixtures/test_data.sql).
 const SEED_ENROLLMENTS = {
   1: ['ENG4U', 'MHF4U', 'SCH4U'],
-  2: ['ENG4U', 'MCV4U'],
+  2: ['ENG4U', 'MCV4U', 'MPM1D'],
   3: ['SBI4U'],
 };
 

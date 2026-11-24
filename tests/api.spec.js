@@ -1,7 +1,8 @@
 // @ts-check
 // API tests: call the PHP endpoints directly, no browser.
-// Expected values come from db/schema_and_seed.sql
-// (course ids: 1 ENG4U, 2 MHF4U, 4 SBI4U, 5 MCV4U, 8 MPM1D inactive).
+// Expected values come from db/schema_and_seed.sql plus tests/fixtures/test_data.sql
+// (course ids: 1 ENG4U, 2 MHF4U, 4 SBI4U, 5 MCV4U, 8 MPM1D inactive;
+// student 2 completed MPM1D before it became inactive).
 
 const { test, expect } = require('@playwright/test');
 
@@ -129,6 +130,17 @@ test.describe('POST /api/enrollments.php', () => {
     await expectError(await enroll(request, 3, { course_id: 9999 }), 404, 'course_not_found');
   });
 
+  test('says "already completed" for a course that became inactive afterwards', async ({ request }) => {
+    const error = await expectError(await enroll(request, 2, { course_id: 8 }), 409, 'already_enrolled');
+    expect(error.message).toBe('You have already completed MPM1D.');
+  });
+
+  test('accepts extra nested fields in the body (not reported as broken JSON)', async ({ request }) => {
+    // Inactive course, so nothing is written: reaching the 422 proves the body was parsed.
+    const body = { course_id: 8, meta: { a: { b: { c: {} } } } };
+    await expectError(await enroll(request, 3, body), 422, 'course_inactive');
+  });
+
   for (const [label, body] of [
     ['a string id', { course_id: '2' }],
     ['a decimal id', { course_id: 2.5 }],
@@ -147,5 +159,10 @@ test.describe('POST /api/enrollments.php', () => {
   test('rejects form posts (only JSON is accepted)', async ({ request }) => {
     const response = await request.post('/api/enrollments.php', { headers: as(3), form: { course_id: '2' } });
     await expectError(response, 415, 'unsupported_media_type');
+  });
+
+  test('checks who is asking before the body format', async ({ request }) => {
+    const response = await request.post('/api/enrollments.php', { form: { course_id: '2' } });
+    await expectError(response, 401, 'unauthenticated');
   });
 });

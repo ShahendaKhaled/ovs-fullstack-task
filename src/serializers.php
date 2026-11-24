@@ -4,8 +4,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/marks.php';
 
 /**
- * Response shapes: turn DB rows into what the API returns.
- * One function per shape, so the whole API contract lives in this file.
+ * Resource shapes: turn DB rows into the objects the API returns.
+ * One function per resource. The response envelope ({"data": ...}) and the
+ * error shape are built in http.php, and each endpoint picks the data keys.
  * Casts happen here because PDO returns numbers from MySQL as strings.
  */
 

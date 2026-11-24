@@ -1,7 +1,7 @@
 // @ts-check
 // UI tests: drive the My Courses page in a real browser, using the same
 // accessible names a screen reader user would hear.
-// Expected values come from db/schema_and_seed.sql.
+// Expected values come from db/schema_and_seed.sql plus tests/fixtures/test_data.sql.
 
 const { test, expect } = require('@playwright/test');
 
@@ -9,6 +9,21 @@ const enrolledList = (page) => page.getByRole('list', { name: 'Enrolled courses'
 const catalogue = (page) => page.getByRole('list', { name: 'Enroll in a course' });
 const courseCard = (page, code) => enrolledList(page).getByRole('listitem').filter({ hasText: code });
 const showFilter = (page, label) => page.getByRole('group', { name: 'Show' }).getByText(label, { exact: true }).click();
+
+/** A promise you resolve from outside: used to hold a response back until the test says so. */
+const gate = () => {
+  let open;
+  const promise = new Promise((resolve) => { open = resolve; });
+  return { promise, open };
+};
+
+/** Lets the page finish handling a response it has just received. */
+const settle = (page) => page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 50)));
+
+const isApi = (file, status) => (url) =>
+  url.pathname.endsWith(`/api/${file}`) && (status === undefined || url.searchParams.get('status') === status);
+/** Same match for page.waitForResponse, which passes a Response rather than a URL. */
+const isApiResponse = (file, status) => (response) => isApi(file, status)(new URL(response.url()));
 
 test('shows the student\'s courses with marks and what they are based on', async ({ page }) => {
   await page.goto('/');
@@ -142,4 +157,132 @@ test('an Enroll that cannot reach the server can be retried', async ({ page }) =
   await expect(page.getByRole('alert')).toHaveText('Could not reach the server. Check your connection and try again.');
   await expect(button).toBeEnabled();
   await expect(button).toHaveText(/^Enroll/);
+});
+
+test.describe('races and failures', () => {
+  test('an enrollment that finishes after switching student stays with the first student', async ({ page }) => {
+    const release = gate();
+    // Mocked, so nothing is written: student 1's enrollment in SBI4U, answered late.
+    await page.route(isApi('enrollments.php'), async (route) => {
+      await release.promise;
+      await route.fulfill({
+        status: 201,
+        json: {
+          data: {
+            course: {
+              enrollment_id: 999, course_id: 4, code: 'SBI4U', title: 'Biology', grade: 12, credit_value: 1,
+              status: 'in_progress', progress_percent: 0, enrolled_at: '2026-11-24 10:00:00', completed_at: null,
+              mark: { percent: null, graded_weight_percent: 0 }, evaluations: [],
+            },
+          },
+        },
+      });
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Enroll in SBI4U' }).click();
+    await page.getByLabel('Viewing as (demo)').selectOption('2');
+    await expect(page.getByText('Hi Liam')).toBeVisible();
+
+    const answered = page.waitForResponse(isApiResponse('enrollments.php'));
+    release.open();
+    await answered;
+    await settle(page);
+
+    await expect(courseCard(page, 'SBI4U')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Enroll in SBI4U' })).toBeEnabled();
+  });
+
+  test('a course list requested before enrolling cannot hide the new course', async ({ page }) => {
+    // Writes to the DB: student 3 + MHF4U is not used by any other test.
+    await page.goto('/?student=3');
+    await expect(courseCard(page, 'SBI4U')).toBeVisible();
+
+    // Hold the "In progress" list, fetched *before* the enrollment exists.
+    const release = gate();
+    const fetched = gate();
+    let first = true;
+    await page.route(isApi('courses.php', 'in_progress'), async (route) => {
+      if (!first) return route.continue();
+      first = false;
+      const response = await route.fetch();
+      fetched.open();
+      await release.promise;
+      await route.fulfill({ response });
+    });
+
+    await showFilter(page, 'In progress');
+    await fetched.promise;
+    await page.getByRole('button', { name: 'Enroll in MHF4U' }).click();
+    await page.waitForResponse(isApiResponse('enrollments.php'));
+
+    const staleAnswered = page.waitForResponse(isApiResponse('courses.php', 'in_progress'));
+    release.open();
+    await staleAnswered;
+    await settle(page);
+
+    await expect(page.getByText('Loading your courses…')).toBeHidden();
+    await expect(courseCard(page, 'MHF4U')).toHaveCount(1);
+    await expect(courseCard(page, 'MHF4U').getByRole('heading')).toBeFocused();
+  });
+
+  test('an older catalogue response cannot overwrite a newer one', async ({ page }) => {
+    // The first catalogue request is answered last, with outdated (empty) data.
+    const release = gate();
+    let first = true;
+    await page.route(isApi('catalogue.php'), async (route) => {
+      if (!first) return route.continue();
+      first = false;
+      await release.promise;
+      await route.fulfill({ json: { data: { courses: [] } } });
+    });
+
+    await page.goto('/?student=3');
+    await page.getByLabel('Viewing as (demo)').selectOption('2');
+    await page.getByLabel('Viewing as (demo)').selectOption('3');
+    await expect(catalogue(page).getByRole('listitem')).toHaveCount(7);
+
+    const staleAnswered = page.waitForResponse(isApiResponse('catalogue.php'));
+    release.open();
+    await staleAnswered;
+    await settle(page);
+
+    await expect(catalogue(page).getByRole('listitem')).toHaveCount(7);
+  });
+
+  test('the Enroll button recovers when refreshing after a conflict also fails', async ({ page }) => {
+    await page.goto('/?student=3');
+    await expect(catalogue(page).getByRole('listitem')).toHaveCount(7);
+
+    // Mocked, so nothing is written.
+    await page.route(isApi('enrollments.php'), (route) => route.fulfill({
+      status: 409,
+      json: { error: { code: 'already_enrolled', message: 'You are already enrolled in ENG4U.' } },
+    }));
+    await page.route(isApi('catalogue.php'), (route) => route.abort('internetdisconnected'));
+
+    const button = page.getByRole('button', { name: 'Enroll in ENG4U' });
+    await button.click();
+
+    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(button).toBeEnabled();
+    await expect(button).toHaveText(/^Enroll in ENG4U/);
+  });
+
+  test('a success response that is not JSON shows a clear error', async ({ page }) => {
+    await page.route(isApi('courses.php'), (route) =>
+      route.fulfill({ status: 200, contentType: 'text/html', body: '<html><body>Gateway page</body></html>' }),
+    );
+    await page.goto('/');
+
+    await expect(page.getByRole('alert')).toHaveText('The server sent an unexpected response. Please try again.');
+  });
+});
+
+test('a link to an unknown student falls back to the first student', async ({ page }) => {
+  await page.goto('/?student=9');
+
+  await expect(page.getByLabel('Viewing as (demo)')).toHaveValue('1');
+  await expect(page.getByText('Hi Amara, here\'s where you stand.')).toBeVisible();
+  await expect(page.getByRole('alert')).toBeHidden();
 });

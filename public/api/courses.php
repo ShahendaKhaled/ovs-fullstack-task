@@ -16,6 +16,7 @@ require_once __DIR__ . '/../../src/http.php'; // first: installs the error handl
 require_once __DIR__ . '/../../src/db.php';
 require_once __DIR__ . '/../../src/auth.php';
 require_once __DIR__ . '/../../src/courses.php';
+require_once __DIR__ . '/../../src/serializers.php';
 
 require_method('GET');
 $student = current_student();

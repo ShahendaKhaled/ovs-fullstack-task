@@ -11,7 +11,9 @@ module.exports = defineConfig({
   workers: 1,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  // No retries: tests enroll students, so a retry would run against changed data
+  // and fail for a different reason than the first attempt.
+  retries: 0,
   reporter: [['list'], ['html', { open: 'never' }]],
   globalSetup: require.resolve('./tests/global-setup.js'),
 

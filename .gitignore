@@ -1,0 +1,13 @@
+# Local overrides (e.g. real DB credentials) — never commit
+config.local.php
+.env
+
+# Test tooling
+node_modules/
+test-results/
+playwright-report/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store

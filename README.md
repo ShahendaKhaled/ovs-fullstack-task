@@ -1,6 +1,6 @@
 # OVS Take-Home — My Courses
 
-**Start:** _TODO_ · **End:** _TODO_
+**Start:** 10:00 · **End:** _TODO_
 
 ## How to run
 
@@ -21,7 +21,7 @@ _TODO_
 
 ## Security
 
-_TODO_
+- **Page security headers are left to the web server.** The API sets its own headers in PHP. Static files never run PHP, so their headers (page CSP, HSTS, etc.) are documented for nginx in `docs/nginx-security-headers.conf` rather than added locally. Locally, `php -S` serves the page without them; a dev router could add them, but it was extra code to secure for something only used in development.
 
 ## Trade-offs
 
@@ -30,7 +30,6 @@ _TODO_
 - **A third, read-only endpoint: `GET /api/catalogue.php`.** The brief asks for two endpoints, but the page needs the active catalogue to enroll from. It lists active courses with the student's enrollment status, so the page can mark courses the student is already in without a second request. Inactive courses are left out entirely.
 - **Two queries per request, however many courses.** One query gets enrollments, one gets all their evaluations. The rows are grouped in PHP rather than with `JSON_ARRAYAGG`, which keeps the SQL plain. No pagination, because a student has a handful of enrollments.
 - **Responses are sent with `send_json(): never`, which ends the script.** That's simpler than building response objects, at the cost of being harder to unit-test the endpoints in isolation, so the plan is to test them over HTTP instead.
-- **Page security headers are left to the web server.** The API sets its own headers in PHP. Static files never run PHP, so their headers (page CSP, HSTS, etc.) are documented for nginx in `docs/nginx-security-headers.conf` rather than added locally. Locally, `php -S` serves the page without them; a dev router could add them, but it was extra code to secure for something only used in development.
 - **The dev database password is committed** (`ovs_app_dev_pw`) so a clean checkout runs with no setup. The account is limited to localhost and has least privilege; real deployments set `DB_PASS`.
 
 ## AI tools
